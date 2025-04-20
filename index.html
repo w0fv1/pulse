@@ -1,805 +1,687 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HTTP接口健康监控</title>
-    <!-- Tailwind CSS via CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.24/dist/full.min.css" rel="stylesheet" type="text/css" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- SweetAlert2 via CDN -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <!-- Alpine.js v3 via CDN (Updated) -->
+    <!-- Ensure Alpine loads AFTER SweetAlert and Tailwind -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
     <style>
-        /* 自定义一些基础样式 */
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; }
-        /* 防止 FOUC (Flash of Unstyled Content) */
-        [x-cloak] { display: none !important; }
-        /* 微调卡片最小高度 */
-        .interface-card { min-height: 160px; }
-        /* 日志弹窗滚动 */
-        .log-modal-content { max-height: 60vh; overflow-y: auto; }
-        /* 状态图标大小 */
-        .status-icon { font-size: 1.2em; }
-        /* Favicon 图像样式 */
+        [x-cloak] {
+            display: none !important;
+        }
+
         .favicon-img {
-            width: 20px; /* 调整为 20x20 */
+            width: 20px;
             height: 20px;
             margin-right: 8px;
             flex-shrink: 0;
-            object-fit: contain; /* 保持 SVG 比例 */
+            object-fit: contain;
+        }
+
+        .log-modal-content {
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .card-actions .btn {
+            margin-left: 0.25rem;
+        }
+
+        .card-title-area {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .card-title-area .card-title {
+            margin-bottom: 0;
+        }
+
+        /* Override daisyUI default */
+        .card-title-area .btn-group {
+            flex-shrink: 0;
         }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800" x-data="appState()" x-init="init()" x-cloak>
 
-    <!-- 顶部区域 -->
-    <header class="bg-blue-600 text-white p-4 shadow-md flex justify-between items-center">
-        <h1 class="text-xl font-semibold">HTTP接口健康监控</h1>
-        <button @click="openAddModal()" class="bg-white text-blue-600 px-4 py-2 rounded hover:bg-blue-100 transition duration-200">
-            + 新增接口
-        </button>
-    </header>
+<body class="bg-base-200 text-base-content min-h-screen" x-data="appState()" x-init="init()" x-cloak>
 
-    <!-- 主体区域: 接口卡片网格 -->
+    <!-- Navbar 导航栏 -->
+    <div class="navbar bg-primary text-primary-content shadow-md sticky top-0 z-50">
+        <div class="flex-1">
+            <a class="btn btn-ghost text-xl">接口健康监控</a>
+        </div>
+        <div class="flex-none">
+            <!-- Button triggering the function -->
+            <button class="btn btn-accent" @click="openAddModal()">+ 新增接口</button>
+        </div>
+    </div>
+
+    <!-- Main Content: Interface Cards 主内容：接口卡片 -->
     <main class="p-4 md:p-6">
         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
-            <!-- 接口卡片模板 -->
-            <template x-for="iface in interfaces" :key="iface.id">
-                <div class="interface-card bg-white rounded-lg shadow-md p-4 flex flex-col justify-between relative border-t-4"
-                     :class="{
-                        'border-green-500': iface.status === 'ok',
-                        'border-red-500': iface.status === 'error',
-                        'border-gray-400': iface.status === 'pending' || !iface.status
-                     }">
 
-                    <!-- 卡片内容 -->
-                    <div>
-                        <div class="flex items-center mb-2">
-                            <!-- Favicon -->
-                            <img :src="iface.favicon || DEFAULT_FAVICON_URI"
-                                 @error="event.target.src=DEFAULT_FAVICON_URI"
-                                 alt="favicon"
-                                 class="favicon-img">
-                            <!-- 标题 -->
-                            <h2 class="font-semibold text-lg truncate" x-text="iface.title" :title="iface.title"></h2>
+            <!-- Card Template 卡片模板 -->
+            <template x-for="iface in interfaces" :key="iface.id">
+                <div class="card bg-base-100 shadow-xl border-t-4 min-h-[210px] flex flex-col justify-between" :class="{
+                        'border-success': iface.status === 'ok',
+                        'border-error': iface.status === 'error',
+                        'border-warning': iface.status === 'pending',
+                        'border-base-300': !iface.status
+                     }">
+                    <div class="card-body p-4">
+                        <div class="card-title-area mb-2">
+                            <div class="flex items-center min-w-0 flex-1">
+                                <img :src="iface.favicon || DEFAULT_FAVICON_URI"
+                                    @error="event.target.src=DEFAULT_FAVICON_URI" alt="favicon" class="favicon-img">
+                                <h2 class="card-title text-lg truncate" x-text="iface.title" :title="iface.title">
+                                </h2>
+                            </div>
+                            <div class="btn-group">
+                                <button @click="openEditModal(iface)"
+                                    class="btn btn-xs btn-ghost text-info hover:bg-info/10 p-1" title="编辑接口">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                                    </svg>
+                                </button>
+                                <button @click="confirmDeleteInterface(iface.id)"
+                                    class="btn btn-xs btn-ghost text-error hover:bg-error/10 p-1" title="删除接口">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12.576 0a48.108 48.108 0 0 1-3.478-.397m7.5 0a48.097 48.097 0 0 1-4.134 0m0 0H21m-9.75 0H3.75" />
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
-                        <!-- URL (显示一部分，鼠标悬浮显示完整) -->
-                        <p class="text-xs text-gray-500 break-all mb-2" :title="iface.url" x-text="truncateUrl(iface.url)"></p>
-                        <!-- 状态 -->
-                        <div class="flex items-center text-sm">
-                            <span class="mr-1 status-icon"
-                                  :class="{
-                                      'text-green-600': iface.status === 'ok',
-                                      'text-red-600': iface.status === 'error',
-                                      'text-gray-500': iface.status === 'pending' || !iface.status
+
+                        <p class="text-xs text-base-content/70 break-all mb-2" :title="iface.url"
+                            x-text="truncateUrl(iface.url)">
+                        </p>
+
+                        <div class="flex items-center text-sm mb-1">
+                            <span class="mr-1 text-xl" :class="{
+                                      'text-success': iface.status === 'ok',
+                                      'text-error': iface.status === 'error',
+                                      'text-warning': iface.status === 'pending',
+                                      'text-base-content/50': !iface.status
                                   }">
                                 <span x-show="iface.status === 'ok'">✅</span>
                                 <span x-show="iface.status === 'error'">❌</span>
-                                <span x-show="iface.status === 'pending'">⏳</span>
+                                <span x-show="iface.status === 'pending'"><span
+                                        class="loading loading-spinner loading-xs"></span></span>
                                 <span x-show="!iface.status">-</span>
                             </span>
-                            <span :class="{
-                                'text-green-600': iface.status === 'ok',
-                                'text-red-600': iface.status === 'error',
-                                'text-gray-500': iface.status === 'pending' || !iface.status
-                            }">
+                            <span class="font-medium" :class="{
+                                    'text-success': iface.status === 'ok',
+                                    'text-error': iface.status === 'error',
+                                    'text-warning': iface.status === 'pending',
+                                    'text-base-content/70': !iface.status
+                                  }">
                                 <span x-text="getStatusText(iface.status)"></span>
-                                <span x-show="iface.status === 'ok' && iface.lastResponseTime !== undefined" x-text="' (' + iface.lastResponseTime + 'ms)'"></span>
+                                <span x-show="iface.status === 'ok' && iface.lastResponseTime !== undefined"
+                                    x-text="' (' + iface.lastResponseTime + 'ms)'">
+                                </span>
                             </span>
                         </div>
-                        <p class="text-xs text-gray-400 mt-1" x-show="iface.lastChecked" x-text="'上次检测: ' + formatTimestamp(iface.lastChecked)"></p>
-                         <p class="text-xs text-red-500 mt-1" x-show="iface.status === 'error' && iface.lastError" x-text="'原因: ' + iface.lastError"></p>
+                        <p class="text-xs text-error" x-show="iface.status === 'error' && iface.lastError"
+                            x-text="'原因: ' + iface.lastError">
+                        </p>
+
+                        <p class="text-xs text-base-content/50 mt-1" x-show="iface.lastChecked"
+                            x-text="'上次检测: ' + formatTimestamp(iface.lastChecked)">
+                        </p>
+                        <p class="text-xs text-base-content/50 mt-1"
+                            x-show="iface.lastChecked && iface.status !== 'pending' && iface.nextCheckInSeconds !== undefined"
+                            x-text="'下次检测: ' + (iface.nextCheckInSeconds > 0 ? iface.nextCheckInSeconds + ' 秒后' : '即将进行...')">
+                        </p>
                     </div>
-
-                    <!-- 右上角删除按钮 -->
-                    <button @click="confirmDeleteInterface(iface.id)" class="absolute top-2 right-2 text-gray-400 hover:text-red-500 text-lg font-bold" title="删除接口">
-                        ×
-                    </button>
-
-                    <!-- 右下角操作按钮 -->
-                    <div class="flex justify-end space-x-2 mt-3">
-                        <button @click="openLogModal(iface.id)" class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 px-2 py-1 rounded transition duration-200" title="查看日志">
-                            日志
-                        </button>
+                    <div class="card-actions justify-end p-4 pt-0">
+                        <button class="btn btn-sm btn-outline btn-info" @click="openLogModal(iface.id)">查看日志</button>
                     </div>
                 </div>
-            </template>
+            </template> <!-- End of x-for template -->
 
-             <!-- 没有接口时的提示 -->
-            <div x-show="interfaces.length === 0" class="col-span-full text-center text-gray-500 py-10">
-                <p>还没有监控任何接口。</p>
-                <button @click="openAddModal()" class="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition duration-200">
-                    点击这里添加第一个接口
-                </button>
+            <!-- Empty State Placeholder 空状态占位符 -->
+            <div x-show="interfaces.length === 0" class="col-span-full text-center py-10 text-base-content/70">
+                <div class="card bg-base-100 shadow-md p-6 inline-block">
+                    <p class="mb-4">还没有监控任何接口。</p>
+                    <button @click="openAddModal()" class="btn btn-primary">
+                        点击添加第一个接口
+                    </button>
+                </div>
             </div>
-        </div>
+
+        </div> <!-- End of grid -->
     </main>
 
-    <!-- 新增接口弹窗 -->
-    <div x-show="isAddModalOpen" @click.self="closeAddModal()" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" x-transition>
-        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md" @click.stop>
-            <h3 class="text-lg font-semibold mb-4">新增监控接口</h3>
+    <!-- Add Interface Modal 新增接口模态框 -->
+    <dialog id="addInterfaceModal" class="modal" x-ref="addModal">
+        <div class="modal-box">
+            <h3 class="font-bold text-lg mb-4">新增监控接口</h3>
             <form @submit.prevent="addInterface()">
-                <div class="mb-4">
-                    <label for="newTitle" class="block text-sm font-medium text-gray-700 mb-1">接口标题 (必填)</label>
-                    <input type="text" id="newTitle" x-model="newInterface.title" required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                <div class="form-control w-full mb-4">
+                    <label class="label"><span class="label-text">接口标题 <span class="text-error">*</span></span></label>
+                    <input type="text" x-model="newInterface.title" required placeholder="例如：用户API状态"
+                        class="input input-bordered w-full" />
                 </div>
-                <div class="mb-4">
-                    <label for="newUrl" class="block text-sm font-medium text-gray-700 mb-1">接口 URL (必填, http/https)</label>
-                    <input type="text" id="newUrl" x-model="newInterface.url" required pattern="^(https?|http)://.+" placeholder="https://example.com/api/status" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                <div class="form-control w-full mb-4">
+                    <label class="label"><span class="label-text">接口 URL <span class="text-error">*</span>
+                            (http/https)</span></label>
+                    <input type="text" x-model="newInterface.url" required pattern="^(https?|http)://.+"
+                        placeholder="https://example.com/api/status" class="input input-bordered w-full" />
                 </div>
-                <div class="mb-4">
-                    <label for="newExpectedText" class="block text-sm font-medium text-gray-700 mb-1">预期返回包含字符 (必填)</label>
-                    <input type="text" id="newExpectedText" x-model="newInterface.expectedText" required placeholder="例如：success, ok, {\"status\":\"ok\"}" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                <div class="form-control w-full mb-4">
+                    <label class="label"><span class="label-text">预期返回包含字符 <span
+                                class="text-error">*</span></span></label>
+                    <input type="text" x-model="newInterface.expectedText" required
+                        placeholder='例如: success, "status":"ok"' class="input input-bordered w-full" />
                 </div>
-                <div class="mb-4">
-                    <label for="newTimeout" class="block text-sm font-medium text-gray-700 mb-1">超时时间 (秒, 默认3)</label>
-                    <input type="number" id="newTimeout" x-model.number="newInterface.timeout" min="1" placeholder="3" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                <div class="form-control w-full mb-4">
+                    <label class="label"><span class="label-text">超时时间 (秒, 默认3)</span></label>
+                    <input type="number" x-model.number="newInterface.timeout" min="1" placeholder="3"
+                        class="input input-bordered w-full" />
                 </div>
-                <div class="flex justify-end space-x-3">
-                    <button type="button" @click="closeAddModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition duration-200">取消</button>
-                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition duration-200">确认添加</button>
+                <div class="modal-action">
+                    <button type="button" class="btn btn-ghost" @click="closeAddModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">确认添加</button>
                 </div>
             </form>
         </div>
-    </div>
+        <!-- Backdrop form for closing -->
+        <div class="modal-backdrop">
+            <button @click.prevent="closeAddModal()">close</button>
+        </div>
+    </dialog>
 
-    <!-- 日志查看弹窗 -->
-    <div x-show="isLogModalOpen" @click.self="closeLogModal()" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" x-transition>
-        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-3xl" @click.stop>
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold">接口日志: <span x-text="getInterfaceTitle(currentLogInterfaceId)"></span></h3>
-                <button @click="confirmClearLogs(currentLogInterfaceId)" class="text-sm bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded transition duration-200">清空此接口日志</button>
+    <!-- Edit Interface Modal 编辑接口模态框 -->
+    <dialog id="editInterfaceModal" class="modal" x-ref="editModal">
+        <div class="modal-box">
+            <!-- 仅当 editingInterface 不是 null 时才渲染这部分内容 -->
+            <template x-if="editingInterface">
+                <div> <!-- 可选的包装 div，或者直接将 x-if 放在 form 上 -->
+                    <h3 class="font-bold text-lg mb-4">编辑监控接口</h3>
+                    <form @submit.prevent="updateInterface()">
+                        <!-- 这些字段现在只在 editingInterface 有对象时才存在 -->
+                        <div class="form-control w-full mb-4">
+                            <label class="label"><span class="label-text">接口标题 <span
+                                        class="text-error">*</span></span></label>
+                            <input type="text" x-model="editingInterface.title" required ... />
+                        </div>
+                        <div class="form-control w-full mb-4">
+                            <label class="label"><span class="label-text">接口 URL <span class="text-error">*</span>
+                                    (http/https)</span></label>
+                            <input type="text" x-model="editingInterface.url" required ... />
+                        </div>
+                        <div class="form-control w-full mb-4">
+                            <label class="label"><span class="label-text">预期返回包含字符 <span
+                                        class="text-error">*</span></span></label>
+                            <input type="text" x-model="editingInterface.expectedText" required ... />
+                        </div>
+                        <div class="form-control w-full mb-4">
+                            <label class="label"><span class="label-text">超时时间 (秒)</span></label>
+                            <input type="number" x-model.number="editingInterface.timeout" min="1" ... />
+                        </div>
+                        <div class="modal-action">
+                            <button type="button" class="btn btn-ghost" @click="closeEditModal()">取消</button>
+                            <button type="submit" class="btn btn-primary">保存更改</button>
+                        </div>
+                    </form>
+                </div>
+            </template> <!-- 结束 x-if="editingInterface" -->
+            <!-- 如果 editingInterface 是 null，你可以选择显示加载状态或什么都不显示 -->
+            <div x-show="!editingInterface" class="text-center p-4">
+                <!-- 可选：加载中或占位符内容 -->
+                <span class="loading loading-spinner"></span>
             </div>
-            <div class="log-modal-content border rounded p-2 bg-gray-50 text-sm">
+        </div>
+        <!-- Backdrop form for closing -->
+        <div class="modal-backdrop">
+            <button @click.prevent="closeEditModal()">close</button>
+        </div>
+    </dialog>
+
+
+    <!-- Log Viewer Modal 日志查看模态框 -->
+    <dialog id="logModal" class="modal" x-ref="logModal">
+        <div class="modal-box w-11/12 max-w-5xl">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-lg">接口日志: <span x-text="getInterfaceTitle(currentLogInterfaceId)"></span></h3>
+                <button @click="confirmClearLogs(currentLogInterfaceId)"
+                    class="btn btn-sm btn-error btn-outline">清空此日志</button>
+            </div>
+            <div class="log-modal-content bg-base-200 p-2 rounded">
                 <ul class="space-y-2">
                     <template x-for="log in filteredLogs()" :key="log.id">
-                        <li class="p-2 rounded" :class="log.success ? 'bg-green-50' : 'bg-red-50'">
+                        <li class="p-2 rounded text-xs" :class="log.success ? 'bg-success/10' : 'bg-error/10'">
                             <div class="flex justify-between items-center mb-1">
-                                <span class="font-medium text-gray-700" x-text="formatTimestamp(log.timestamp)"></span>
-                                <span class="px-2 py-0.5 rounded text-xs font-semibold"
-                                      :class="log.success ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'"
-                                      x-text="log.success ? '成功' : '失败'">
+                                <span class="font-medium text-base-content/80" x-text="formatTimestamp(log.timestamp)">
+                                </span>
+                                <span class="badge badge-sm" :class="log.success ? 'badge-success' : 'badge-error'"
+                                    x-text="log.success ? '成功' : '失败'">
                                 </span>
                             </div>
-                            <div class="text-gray-600">
-                                <p>URL: <span class="font-mono text-xs" x-text="log.url"></span></p>
-                                <p>状态码: <span x-text="log.statusCode ?? 'N/A'"></span></p>
-                                <p>响应时间: <span x-text="(log.responseTime !== null && log.responseTime !== undefined) ? log.responseTime + ' ms' : 'N/A'"></span></p>
-                                <p>包含预期字符 (<span class="font-mono text-xs" x-text="getInterfaceExpectedText(log.interfaceId)"></span>): <span x-text="log.containsExpected ? '是' : '否'"></span></p>
-                                <p x-show="!log.success && log.error" class="text-red-700">错误: <span x-text="log.error"></span></p>
+                            <div class="text-base-content/70 space-y-0.5">
+                                <p>URL: <code class="text-xs" x-text="log.url"></code></p>
+                                <p>状态码: <span class="font-semibold" x-text="log.statusCode ?? 'N/A'"></span></p>
+                                <p>响应时间: <span
+                                        x-text="(log.responseTime !== null && log.responseTime !== undefined) ? log.responseTime + ' ms' : 'N/A'"></span>
+                                </p>
+                                <p>包含预期 (<code class="text-xs"
+                                        x-text="getInterfaceExpectedText(log.interfaceId)"></code>): <span
+                                        x-text="log.containsExpected ? '是' : '否'"></span></p>
+                                <p x-show="!log.success && log.error" class="text-error font-medium">错误: <span
+                                        x-text="log.error"></span></p>
                             </div>
                         </li>
                     </template>
-                    <li x-show="filteredLogs().length === 0" class="text-center text-gray-500 py-4">
-                        暂无日志记录。
-                    </li>
+                    <li x-show="filteredLogs().length === 0" class="text-center text-base-content/50 py-4">暂无日志记录。</li>
                 </ul>
             </div>
-            <div class="mt-4 flex justify-end">
-                 <button type="button" @click="closeLogModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition duration-200">关闭</button>
+            <div class="modal-action mt-4">
+                <button type="button" class="btn btn-ghost" @click="closeLogModal()">关闭</button>
             </div>
         </div>
+        <!-- Backdrop form for closing -->
+        <div class="modal-backdrop">
+            <button @click.prevent="closeLogModal()">close</button>
+        </div>
+    </dialog>
+
+    <!-- Toast Notifications Area 提示通知区域 -->
+    <div class="toast toast-top toast-end z-[9999]">
+        <template x-for="toast in toasts" :key="toast.id">
+            <div :class="['alert', toast.type === 'error' ? 'alert-error' : (toast.type === 'success' ? 'alert-success' : 'alert-warning'), 'shadow-lg', 'cursor-pointer']"
+                @click="removeToast(toast.id)">
+                <div class="flex-1">
+                    <span class="text-sm" x-text="toast.message"></span>
+                </div>
+            </div>
+        </template>
     </div>
 
-<script>
-    // --- 全局常量 ---
-    // 新的默认SVG图标 (Base64编码)
-    const DEFAULT_FAVICON_URI = 'data:image/svg+xml;base64,PHN2ZyB0PSIxNzQ1MTQyNTM5MzgxIiBjbGFzcz0iaWNvbiIgdmlld0JveD0iMCAwIDEwMjQgMTAyNCIgdmVyc2lvbj0iMS4xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHAtaWQ9IjI3NTgiIHdpZHRoPSIyNTYiIGhlaWdodD0iMjU2Ij48cGF0aCBkPSJNNTEyIDMyQzI0Ni45MTIgMzIgMzIgMjQ2Ljg0OCAzMiA1MTJzMjE0LjkxMiA0ODAgNDgwIDQ4MGMzNjUuMTUyIDAgNDgwLTIxNC44NDggNDgwLTQ4MFM3NzcuMTUyIDMyIDUxMiAzMnpNMzIwLjI1NiAxNDMuMDRjMjAuODY0LTEwLjg4IDQyLjY4OC0yMC4xNiA2NS40MDgtMjcuMzkyLTIzLjYxNiAzNC42MjQtNDMuOTY4IDc4LjY1Ni01OS45MDQgMTI5LjYtMjMuODA4LTE1LjIzMi0zNy43Ni0zMy40NzItMzcuNzYtNTMuMjQ4IDAtMTcuOTg0IDEyLjIyNC0zNC41NiAzMi4yNTYtNDguOTZ6TTIyNy4xMzYgMjA5LjM0NGM3LjQyNCAzNy41NjggMzYuODY0IDcxLjI5NiA4Mi43NTIgOTYuNTEyLTExLjg0IDUzLjM3Ni0xOS4yIDExMi4wNjQtMjEuMTIgMTc0LjE0NEg5Ny42YTQxNC40NjQgNDE0LjQ2NCAwIDAgMSAxMjkuNTM2LTI3MC42NTZ6IG0wIDYwNS4zMTJBNDE0LjQ2NCA0MTQuNDY0IDAgMCAxIDk3LjYgNTQ0aDE5MS4xMDRjMS45MiA2Mi4wOCA5LjM0NCAxMjAuNzY4IDIxLjE4NCAxNzQuMTQ0LTQ1Ljg4OCAyNS4wODgtNzUuMzI4IDU4Ljk0NC04Mi43NTIgOTYuNTEyek0zMjAuMjU2IDg4MC45NmMtMjAuMDMyIDE0LjQtMzIuMjU2IDMwLjk3Ni0zMi4yNTYgNDguOTYgMCAxOS43NzYgMTMuOTUyIDM4LjA4IDM3Ljc2IDUzLjMxMiAxNS45MzYgNTEuMDA4IDM2LjI4OCA5NC45NzYgNTkuOTA0IDEyOS42NjRhNDExLjM5MiA0MTEuMzkyIDAgMCAxLTY1LjQwOC0yNy4zOTJ6IG0xNTkuNzQ0IDM4LjY1NmMtNDAuMTkyLTIxLjE4NC03NC44MTYtODEuODU2LTk3LjkyLTE2NS41NjhhNDI1LjUzNiA0MjUuNTM2IDAgMCAxIDk3LjkyLTE2LjcwNHYxODIuMjcyek00ODAgNzU5Ljg0YTQ1NC41OTIgNDU0LjU5MiAwIDAgMC0xMTEuNjggMjAuMjg4QTk2Ni40IDk2Ni40IDAgMCAxIDM1Mi42NCA1NDRIODBWMTI5Ljc5MnogbTAtMTkzLjc5MkgzNTIuNjRhOTY2LjQgOTY2LjQgMCAwIDEgMTUuNjgtMTUwLjA4IDQ2MC42MDggNDYwLjYwOCAwIDAgMCAxMTEuNjggMjAuMzUyVjQ4MHogbTAtMTkzLjM0NGE0MzIuNTEyIDQzMi41MTIgMCAwIDEtOTcuOTItMTYuNzA0YzIzLjEwNC04My43MTIgNTcuNzI4LTE0NC4zMiA5Ny45Mi0xNjUuNTY4djE4Mi4yNzJ6IG0zMTYuODY0LTc3LjMxMkE0MTQuMDggNDE0LjA4IDAgMCAxIDkyNi4zMzYgNDgwaC0xOTEuMTA0Yy0xLjkyLTYyLjA4LTkuMzQ0LTEyMC43NjgtMjEuMTg0LTE3NC4xNDQgNDUuOTUyLTI1LjE1MiA3NS4zOTItNTguOTQ0IDgyLjgxNi05Ni41MTJ6IG0tOTMuMTItNjYuMzA0YzIwLjAzMiAxNC40IDMyLjI1NiAzMC45NzYgMzIuMjU2IDQ4Ljk2IDAgMTkuNzc2LTEzLjk1MiAzOC4wMTYtMzcuNzYgNTMuMjQ4LTE1LjkzNi01MC45NDQtMzYuMjg4LTk0Ljk3Ni01OS45NjgtMTI5LjZhNDA5LjYgNDA5LjYgMCAwIDEgNjUuNDcyIDI3LjM5MnptLTkwLjYyNCA1MS45MDhjLTIuMjQtMS43MjgtNC41NDQtMy40NTYtNi44NDgtNS4xMi0xOS40NTYgMTYuMzItMzIuMjU2IDM4LjcyLTMyLjI1NiA2My40MjQgMCAyNi4wMTYgMTQuMTQ0IDQ4LjUgMzIuMjU2IDY0LjQ0OCAyLjI0LTEuNzI4IDQuNjA4LTMuNDU2IDYuODQ4LTUuMTItMTYuODMyLTE1LjIyNC0yOC4yMjQtMzcuMjgtMjguMjI0LTYxLjI4czExLjM5Mi00NS45ODQgMjguMjI0LTYxLjI4ek01NDQgMTA0LjM4NGM0MC4yNTYgMjEuMjQ4IDc0Ljg4IDgxLjg1NiA5Ny45MiAxNjUuNTY4YTQzMi41MTIgNDMyLjUxMiAwIDAgMS05Ny45MiAxNi43MDRWMTA0LjM4NHogbTAgMjQ1Ljg4OGE0NjAuMDk2IDQ2MC4wOTYgMCAwIDAgMTExLjY4LTIwLjI4OGM4LjY0IDQ1Ljg4OCAxNC4xNDQgOTYuNDQ4IDE1LjY4IDE1MC4wMTZINTQ0VjM1MC4yNzJ6IG0wIDE5My43MjhoMTI3LjM2Yy0xLjUzNiA1My41NjgtNy4wNCAxMDQuMTI4LTE1LjY4IDE1MC4xNDRhNDU0LjAxNiA0NTQuMDE2IDAgMCAwLTExMS42OC0yMC4yODhWNTR6IG0wIDM3NS42MTZ2LTE4Mi4yNzJhNDI1LjUzNiA0MjUuNTM2IDAgMCAxIDk3LjkyIDE2LjcwNGMtMjMuMDQgODMuNzEyLTU3LjY2NCAxNDQuMzg0LTk3LjkyIDE2NS41Njh6IG0xNTkuNzQ0LTM4LjY1NmMtMjAuODY0IDEwLjg4LTQyLjY4OCAyMC4xNi02NS40MDggMjcuNDU2IDIzLjYxNi0zNC42ODggNDQuMDMyLTc4LjY1NiA1OS45NjgtMTI5LjY2NCAyMy44MDggMTUuMjMyIDM3Ljc2IDMzLjUzNiAzNy43NiA1My4zMTItMC4wNjQgMTcuODU2LTEyLjI4OCAzNC40OTYtMzIuMzIgNDguODk2eiBtOTMuMTItNjYuMzA0Yy03LjQyNC0zNy41NjgtMzYuOTI4LTcxLjM2LTgyLjgxNi05Ni41MTJhOTM2Ljk2IDkzNi45NiAwIDAgMCAyMS4xODQtMTc0LjE0NGgxOTEuMTA0YTQxNC4wOCA0MTQuMDggMCAwIDEtMTI5LjQ3MiAyNzAuNjU2eiIgZmlsbD0iIzI3MjcyNyIgcC1pZD0iMjc1OSI+PC9wYXRoPjwvc3ZnPg==';
+    <!-- JavaScript Definitions -->
+    <script>
+        // --- 常量定义 ---
+        const DEFAULT_FAVICON_URI = "data:image/svg+xml;charset=utf-8;base64,PHN2ZyB0PSIxNzQ1MTQ1MTQ4ODA4IiBjbGFzcz0iaWNvbiIgdmlld0JveD0iMCAwIDEwMjQgMTAyNCIgdmVyc2lvbj0iMS4xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHAtaWQ9IjI3NTgiIHdpZHRoPSIyNTYiIGhlaWdodD0iMjU2Ij48cGF0aCBkPSJNNTEyIDMyQzI0Ni45MTIgMzIgMzIgMjQ2Ljg0OCAzMiA1MTJzMjE0LjkxMiA0ODAgNDgwIDQ4MGMyNjUuMTUyIDAgNDgwLTIxNC44NDggNDgwLTQ4MFM3NzcuMTUyIDMyIDUxMiAzMnpNMzIwLjI1NiAxNDMuMDRjMjAuODY0LTEwLjg4IDQyLjY4OC0yMC4xNiA2NS40MDgtMjcuMzkyLTIzLjYxNiAzNC42MjQtNDMuOTY4IDc4LjY1Ni01OS45MDQgMTI5LjYtMjMuODA4LTE1LjIzMi0zNy43Ni0zMy40NzItMzcuNzYtNTMuMjQ4IDAtMTcuOTg0IDEyLjIyNC0zNC41NiAzMi4yNTYtNDguOTZ6TTIyNy4xMzYgMjA5LjM0NGM3LjQyNCAzNy41NjggMzYuODY0IDcxLjI5NiA4Mi43NTIgOTYuNTEyLTExLjg0IDUzLjM3Ni0xOS4yIDExMi4wNjQtMjEuMTIgMTc0LjE0NEg5Ny42YTQxNC40NjQgNDE0LjQ2NCAwIDAgMSAxMjkuNTM2LTI3MC42NTZ6IG0wIDYwNS4zMTJBNDE0LjQ2NCA0MTQuNDY0IDAgMCAxIDk3LjYgNTQ0aDE5MS4xMDRjMS45MiA2Mi4wOCA5LjM0NCAxMjAuNzY4IDIxLjE4NCAxNzQuMTQ0LTQ1Ljg4OCAyNS4wODgtNzUuMzI4IDU4Ljk0NC04Mi43NTIgOTYuNTEyeiBtOTMuMTIgNjYuMzA0QzMwMC4yMjQgODY2LjU2IDI4OCA4NDkuOTIgMjg4IDgzMmMwLTE5Ljc3NiAxMy45NTItMzguMDggMzcuNzYtNTMuMzEyIDE1LjkzNiA1MS4wMDggMzYuMjg4IDk0Ljk3NiA1OS45MDQgMTI5LjY2NGE0MTEuMzkyIDQxMS4zOTIgMCAwIDEtNjUuNDA4LTI3LjM5MnogbTE1OS43NDQgMzguNjU2Yy00MC4xOTItMjEuMTg0LTc0LjgxNi04MS44NTYtOTcuOTItMTY1LjU2OGE0MjUuNTM2IDQyNS41MzYgMCAwIDEgOTcuOTItMTYuNzA0djE4Mi4yNzJ6IG0wLTI0NS44MjRhNDU0LjU5MiA0NTQuNTkyIDAgMCAwLTExMS42OCAyMC4yODhBOTY2LjQgOTY2LjQgMCAwIDEgMzUyLjY0IDU0NEg0ODB2MTI5Ljc5MnogbTAtMTkzLjc5MkgzNTIuNjRhOTY2LjQgOTY2LjQgMCAwIDEgMTUuNjgtMTUwLjA4IDQ2MC42MDggNDYwLjYwOCAwIDAgMCAxMTEuNjggMjAuMzUyVjQ4MHogbTAtMTkzLjM0NGE0MzIuNTEyIDQzMi41MTIgMCAwIDEtOTcuOTItMTYuNzA0YzIzLjEwNC04My43MTIgNTcuNzI4LTE0NC4zMiA5Ny45Mi0xNjUuNTY4djE4Mi4yNzJ6IG0zMTYuODY0LTc3LjMxMkE0MTQuMDggNDE0LjA4IDAgMCAxIDkyNi4zMzYgNDgwaC0xOTEuMTA0Yy0xLjkyLTYyLjA4LTkuMzQ0LTEyMC43NjgtMjEuMTg0LTE3NC4xNDQgNDUuOTUyLTI1LjE1MiA3NS4zOTItNTguOTQ0IDgyLjgxNi05Ni41MTJ6IG0tOTMuMTItNjYuMzA0YzIwLjAzMiAxNC40IDMyLjI1NiAzMC45NzYgMzIuMjU2IDQ4Ljk2IDAgMTkuNzc2LTEzLjk1MiAzOC4wMTYtMzcuNzYgNTMuMjQ4LTE1LjkzNi01MC45NDQtMzYuMjg4LTk0Ljk3Ni01OS45NjgtMTI5LjZhNDA5LjYgNDA5LjYgMCAwIDEgNjUuNDcyIDI3LjM5MnpNNTQ0IDEwNC4zODRjNDAuMjU2IDIxLjI0OCA3NC44OCA4MS44NTYgOTcuOTIgMTY1LjU2OGE0MzIuNTEyIDQzMi41MTIgMCAwIDEtOTcuOTIgMTYuNzA0VjEwNC4zODR6IG0wIDI0NS44ODhhNDYwLjA5NiA0NjAuMDk2IDAgMCAwIDExMS42OC0yMC4yODhjOC42NCA0NS44ODggMTQuMTQ0IDk2LjQ0OCAxNS42OCAxNTAuMDE2SDU0NFYzNTAuMjcyeiBtMCAxOTMuNzI4aDEyNy4zNmMtMS41MzYgNTMuNTY4LTcuMDQgMTA0LjEyOC0xNS42OCAxNTAuMTQ0YTQ1NC4wMTYgNDU0LjAxNiAwIDAgMC0xMTEuNjgtMjAuMjg4VjU0NHogbTAgMzc1LjYxNnYtMTgyLjI3MmE0MjUuNTM2IDQyNS41MzYgMCAwIDEgOTcuOTIgMTYuNzA0Yy0yMy4wNCA4My43MTItNTcuNjY0IDE0NC4zODQtOTcuOTIgMTY1LjU2OHogbTE1OS43NDQtMzguNjU2Yy0yMC44NjQgMTAuODgtNDIuNjg4IDIwLjE2LTY1LjQwOCAyNy40NTYgMjMuNjE2LTM0LjY4OCA0NC4wMzItNzguNjU2IDU5Ljk2OC0xMjkuNjY0IDIzLjgwOCAxNS4yMzIgMzcuNzYgMzMuNTM2IDM3Ljc2IDUzLjMxMi0wLjA2NCAxNy44NTYtMTIuMjg4IDM0LjQ5Ni0zMi4zMiA0OC44OTZ6IG05My4xMi02Ni4zMDRjLTcuNDI0LTM3LjU2OC0zNi45MjgtNzEuMzYtODIuODE2LTk2LjUxMmE5MzYuOTYgOTM2Ljk2IDAgMCAwIDIxLjE4NC0xNzQuMTQ0aDE5MS4xMDRhNDE0LjA4IDQxNC4wOCAwIDAgMS0xMjkuNDcyIDI3MC42NTZ6IiBmaWxsPSJjdXJyZW50Q29sb3IiIHAtaWQ9IjI3NTkiPjwvcGF0aD48L3N2Zz4=";
+        const PROXY_BASE_URL = 'https://cors-proxy.wofbi233.workers.dev/'; // Use your CORS proxy
+        const DB_NAME = 'InterfaceMonitorDB_Daisy_v2';
+        const DB_VERSION = 1;
+        const INTERFACE_STORE = 'interfaces';
+        const LOG_STORE = 'logs';
 
-    // --- IndexedDB 简单封装 (数据库操作) ---
-    const DB_NAME = 'InterfaceMonitorDB';
-    const DB_VERSION = 1; // 如果更改结构，需要增加版本号
-    const INTERFACE_STORE = 'interfaces';
-    const LOG_STORE = 'logs';
+        // --- IndexedDB 封装 ---
+        // (No changes needed in IndexedDB functions)
+        function openDB() { return new Promise((resolve, reject) => { const request = indexedDB.open(DB_NAME, DB_VERSION); request.onerror = (event) => reject("IndexedDB error: " + request.error); request.onsuccess = (event) => resolve(event.target.result); request.onupgradeneeded = (event) => { console.log('IndexedDB upgrade needed...'); const db = event.target.result; if (!db.objectStoreNames.contains(INTERFACE_STORE)) { db.createObjectStore(INTERFACE_STORE, { keyPath: 'id' }); } if (!db.objectStoreNames.contains(LOG_STORE)) { const logStore = db.createObjectStore(LOG_STORE, { keyPath: 'id' }); logStore.createIndex('interfaceId', 'interfaceId', { unique: false }); logStore.createIndex('timestamp', 'timestamp', { unique: false }); } console.log('IndexedDB upgrade complete.'); }; }); }
+        function dbAction(storeName, mode, action) { return openDB().then(db => { return new Promise((resolve, reject) => { try { const transaction = db.transaction(storeName, mode); const store = transaction.objectStore(storeName); action(store, resolve, reject); transaction.oncomplete = () => { db.close(); if (action.length <= 1) resolve(); }; transaction.onerror = (event) => { db.close(); reject(`Transaction error on ${storeName}: ${event.target.error}`); }; } catch (error) { db.close(); reject(`Failed to start transaction on ${storeName}: ${error}`); } }); }); }
+        function getAll(storeName) { return dbAction(storeName, 'readonly', (store, resolve, reject) => { const request = store.getAll(); request.onsuccess = () => resolve(request.result); request.onerror = (event) => reject(`Get all error from ${storeName}: ${event.target.error}`); }); }
+        function saveItem(storeName, item) { return dbAction(storeName, 'readwrite', (store, resolve, reject) => { const request = store.put(item); request.onsuccess = () => resolve(); request.onerror = (event) => reject(`Save/Update error in ${storeName}: ${event.target.error}`); }); }
+        function deleteItem(storeName, key) { return dbAction(storeName, 'readwrite', (store, resolve, reject) => { const request = store.delete(key); request.onsuccess = () => resolve(); request.onerror = (event) => reject(`Delete error from ${storeName}: ${event.target.error}`); }); }
+        function deleteLogsByInterface(interfaceId) { return dbAction(LOG_STORE, 'readwrite', (store, resolve, reject) => { const index = store.index('interfaceId'); const request = index.openCursor(IDBKeyRange.only(interfaceId)); let deletePromises = []; request.onsuccess = (event) => { const cursor = event.target.result; if (cursor) { deletePromises.push(new Promise((res, rej) => { const deleteRequest = cursor.delete(); deleteRequest.onsuccess = res; deleteRequest.onerror = (e) => rej(e.target.error); })); cursor.continue(); } else { Promise.all(deletePromises).then(resolve).catch(reject); } }; request.onerror = (event) => reject(`Cursor error for deleting logs: ${event.target.error}`); }); }
+        function saveLog(logData) { return dbAction(LOG_STORE, 'readwrite', (store, resolve, reject) => { const addRequest = store.add(logData); addRequest.onsuccess = resolve; addRequest.onerror = (e) => reject(e.target.error); }); }
+        function pruneOldLogs(interfaceId, maxKept) { return dbAction(LOG_STORE, 'readwrite', (store, resolve, reject) => { const index = store.index('timestamp'); let count = 0; const request = index.openCursor(null, 'prev'); const logsToDelete = []; request.onsuccess = event => { const cursor = event.target.result; if (cursor) { if (cursor.value.interfaceId === interfaceId) { count++; if (count > maxKept) { logsToDelete.push(cursor.primaryKey); } } cursor.continue(); } else { let deletePromises = logsToDelete.map(logId => new Promise((res, rej) => { const delReq = store.delete(logId); delReq.onsuccess = res; delReq.onerror = e => rej(e.target.error); })); Promise.all(deletePromises).then(() => resolve(logsToDelete.length)).catch(reject); } }; request.onerror = event => reject(`Cursor error for pruning logs: ${event.target.error}`); }); }
+        // --- 结束 IndexedDB ---
 
-    function openDB() {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open(DB_NAME, DB_VERSION);
+        // --- 代理 Fetch 函数 ---
+        async function fetchThroughProxy({ url, method = 'GET', query = {}, body = null, headers = {}, signal }) { if (!url) throw new Error('目标URL是必需的'); const urlObject = new URL(url); Object.entries(query).forEach(([key, value]) => urlObject.searchParams.append(key, value)); const targetUrl = urlObject.toString(); const proxyUrl = new URL(PROXY_BASE_URL); proxyUrl.searchParams.append('url', targetUrl); const fetchOptions = { method, headers: { ...headers, }, signal, body: (method !== 'GET' && method !== 'HEAD' && body) ? (typeof body === 'string' ? body : JSON.stringify(body)) : null, }; if (fetchOptions.body && typeof body === 'object' && !headers['Content-Type']) { fetchOptions.headers['Content-Type'] = 'application/json'; } console.log(`通过代理 ${proxyUrl.toString()} 请求 ${method} ${targetUrl}`); const response = await fetch(proxyUrl.toString(), fetchOptions); return response; }
 
-            request.onerror = (event) => reject("IndexedDB error: " + request.error);
-            request.onsuccess = (event) => resolve(event.target.result);
+        // --- Alpine.js 应用状态 ---
+        function appState() {
+            return {
+                // --- 核心数据 ---
+                interfaces: [],
+                logs: [],
+                newInterface: { title: '', url: '', expectedText: '', timeout: 3 },
+                editingInterface: null,
+                currentLogInterfaceId: null,
 
-            request.onupgradeneeded = (event) => {
-                console.log('IndexedDB upgrade needed...');
-                const db = event.target.result;
-                if (!db.objectStoreNames.contains(INTERFACE_STORE)) {
-                    db.createObjectStore(INTERFACE_STORE, { keyPath: 'id' });
-                    console.log(`Object store ${INTERFACE_STORE} created.`);
-                }
-                if (!db.objectStoreNames.contains(LOG_STORE)) {
-                    const logStore = db.createObjectStore(LOG_STORE, { keyPath: 'id' });
-                    logStore.createIndex('interfaceId', 'interfaceId', { unique: false });
-                    logStore.createIndex('timestamp', 'timestamp', { unique: false });
-                    console.log(`Object store ${LOG_STORE} created with indexes.`);
-                }
-                console.log('IndexedDB upgrade complete.');
-            };
-        });
-    }
+                // --- 配置项 ---
+                pollingInterval: null,
+                uiUpdateInterval: null,
+                pollingFrequency: 15000, // 15秒检查一次
+                maxLogsPerInterface: 100,
+                toasts: [],
 
-    function dbAction(storeName, mode, action) {
-        return openDB().then(db => {
-            return new Promise((resolve, reject) => {
-                try {
-                    const transaction = db.transaction(storeName, mode);
-                    const store = transaction.objectStore(storeName);
-                    action(store, resolve, reject); // Pass resolve/reject to the action
-                    transaction.oncomplete = () => {
-                         // Only resolve if action didn't explicitly resolve/reject itself
-                        // This helps actions that return values (like getAll) work correctly.
-                        // Check if action expects resolve/reject args. A simple heuristic:
-                        if(action.length <= 1) resolve();
-                    };
-                    transaction.onerror = (event) => reject(`Transaction error on ${storeName}: ${event.target.error}`);
-                } catch (error) {
-                    reject(`Failed to start transaction on ${storeName}: ${error}`);
-                }
-            });
-        });
-    }
-
-    // 从 IndexedDB 获取所有数据
-    function getAll(storeName) {
-        // Action now explicitly uses resolve
-        return dbAction(storeName, 'readonly', (store, resolve, reject) => {
-            const request = store.getAll();
-            request.onsuccess = () => resolve(request.result); // Resolve with the result
-            request.onerror = (event) => reject(`Get all error from ${storeName}: ${event.target.error}`);
-        });
-    }
-
-    // 保存所有数据到 IndexedDB (覆盖式)
-    function saveAll(storeName, items) {
-        // Action now explicitly uses resolve/reject
-        return dbAction(storeName, 'readwrite', (store, resolve, reject) => {
-            const clearRequest = store.clear(); // 先清空
-            clearRequest.onsuccess = () => {
-                let count = 0;
-                if (items.length === 0) {
-                    resolve(); // 没有要添加的项
-                    return;
-                }
-                let errors = [];
-                items.forEach(item => {
+                // --- 生命周期 & 初始化 ---
+                async init() {
+                    console.log('App initializing...');
                     try {
-                        const addRequest = store.add(item); // 逐个添加
-                        addRequest.onsuccess = () => {
-                            count++;
-                            if (count === items.length) {
-                                if (errors.length > 0) {
-                                    reject(`Errors occurred while adding items to ${storeName}: ${errors.join(', ')}`);
-                                } else {
-                                    resolve(); // 所有项添加成功
-                                }
-                            }
-                        };
-                        addRequest.onerror = (event) => {
-                            count++; // Also count errors to know when all attempts are done
-                            console.error(`Error adding item to ${storeName}:`, item, event.target.error);
-                            errors.push(event.target.error);
-                             if (count === items.length) {
-                                reject(`Errors occurred while adding items to ${storeName}: ${errors.join(', ')}`);
-                            }
-                        };
-                    } catch (addError) {
-                        count++;
-                        console.error(`Exception adding item to ${storeName}:`, item, addError);
-                        errors.push(addError);
-                         if (count === items.length) {
-                             reject(`Exceptions occurred while adding items to ${storeName}: ${errors.join(', ')}`);
-                         }
-                    }
-                });
-            };
-            clearRequest.onerror = (event) => reject(`Clear store error for ${storeName}: ${event.target.error}`);
-        });
-    }
+                        this.interfaces = await getAll(INTERFACE_STORE);
+                        this.logs = await getAll(LOG_STORE);
+                        console.log(`Loaded ${this.interfaces.length} interfaces, ${this.logs.length} logs.`);
 
-     // 从 IndexedDB 删除单个项目
-    function deleteItem(storeName, key) {
-         // Action now explicitly uses resolve/reject
-        return dbAction(storeName, 'readwrite', (store, resolve, reject) => {
-            const request = store.delete(key);
-            request.onsuccess = () => resolve();
-            request.onerror = (event) => reject(`Delete error from ${storeName}: ${event.target.error}`);
-        });
-    }
-
-    // 从 IndexedDB 删除指定接口的所有日志
-    function deleteLogsByInterface(interfaceId) {
-        // Action now explicitly uses resolve/reject
-        return dbAction(LOG_STORE, 'readwrite', (store, resolve, reject) => {
-            const index = store.index('interfaceId');
-            const request = index.openCursor(IDBKeyRange.only(interfaceId));
-            let deletePromises = [];
-            request.onsuccess = (event) => {
-                const cursor = event.target.result;
-                if (cursor) {
-                    deletePromises.push(new Promise((res, rej) => {
-                        const deleteRequest = cursor.delete();
-                        deleteRequest.onsuccess = res;
-                        deleteRequest.onerror = (e) => rej(e.target.error); // Pass error on reject
-                    }));
-                    cursor.continue();
-                } else {
-                    // 所有匹配项处理完毕
-                    Promise.all(deletePromises).then(resolve).catch(reject); // Propagate potential rejection
-                }
-            };
-            request.onerror = (event) => reject(`Cursor error for deleting logs: ${event.target.error}`);
-        });
-    }
-    // --- End IndexedDB ---
-
-    // --- Alpine.js State (应用状态和逻辑) ---
-    function appState() {
-        return {
-            interfaces: [], // 接口列表 (将从IndexedDB加载)
-            logs: [],       // 所有日志记录 (将从IndexedDB加载)
-            isAddModalOpen: false,
-            isLogModalOpen: false,
-            currentLogInterfaceId: null,
-            newInterface: { // 新增接口表单模型
-                title: '',
-                url: '',
-                expectedText: '',
-                timeout: 3
-            },
-            pollingInterval: null, // 定时器ID
-            pollingFrequency: 10000, // 轮询间隔 (毫秒, 10秒)
-            maxNormalLogs: 100, // 最大保留的正常日志数量
-
-            // --- 初始化 ---
-            async init() {
-                console.log('App initializing...');
-                try {
-                    // 从 IndexedDB 加载接口和日志数据
-                    this.interfaces = await getAll(INTERFACE_STORE);
-                    this.logs = await getAll(LOG_STORE);
-                    console.log(`Loaded ${this.interfaces.length} interfaces and ${this.logs.length} logs from IndexedDB.`);
-
-                    // 初始化接口状态和 Favicon
-                    this.interfaces.forEach(iface => {
-                        if (!iface.status) iface.status = 'pending'; // 初始状态
-                        // 尝试获取 Favicon URL, 如果已有则保留, 否则尝试生成
-                        if (!iface.favicon) {
-                            iface.favicon = this.getFaviconUrl(iface.url);
-                        }
-                        // 确保 timeout 是数字
-                        if (typeof iface.timeout !== 'number' || iface.timeout <= 0) {
-                            iface.timeout = 3;
-                        }
-                    });
-
-                    this.startPolling(); // 启动定时轮询
-                    // 不要立即检查，让 polling 第一次触发时检查
-                    // this.checkAllInterfaces();
-
-                } catch (error) {
-                    console.error("Initialization failed:", error);
-                    this.showErrorAlert('加载本地数据失败，请尝试刷新页面或检查浏览器设置。');
-                }
-            },
-
-            // --- 核心检测逻辑 ---
-            startPolling() {
-                if (this.pollingInterval) clearInterval(this.pollingInterval);
-                // 立即执行一次，然后设置间隔
-                this.checkAllInterfaces();
-                this.pollingInterval = setInterval(() => {
-                    this.checkAllInterfaces();
-                }, this.pollingFrequency);
-                console.log(`Polling started: checking every ${this.pollingFrequency / 1000} seconds.`);
-            },
-
-            stopPolling() {
-                 if (this.pollingInterval) {
-                    clearInterval(this.pollingInterval);
-                    this.pollingInterval = null;
-                    console.log('Polling stopped.');
-                 }
-            },
-
-            checkAllInterfaces() {
-                console.log(`[${new Date().toLocaleTimeString()}] Checking all ${this.interfaces.length} interfaces...`);
-                if (this.interfaces.length === 0) return;
-                this.interfaces.forEach(iface => {
-                     // 避免在上一次请求未完成时重复发起
-                    if(iface.status !== 'pending') {
-                         this.checkInterfaceStatus(iface.id);
-                    } else {
-                        console.log(`Skipping check for ${iface.title} (${iface.id}) as it's already pending.`);
-                    }
-                });
-            },
-
-            async checkInterfaceStatus(interfaceId) {
-                const ifaceIndex = this.interfaces.findIndex(i => i.id === interfaceId);
-                if (ifaceIndex === -1) {
-                     console.warn(`Interface with ID ${interfaceId} not found for checking.`);
-                     return; // 接口已被删除
-                }
-
-                // 使用一个临时变量来操作，避免在异步操作中索引可能变化的问题
-                // （虽然在这个场景下不太可能，但更安全）
-                let iface = { ...this.interfaces[ifaceIndex] }; // 浅拷贝一份当前状态
-
-                // 更新内存中的状态为处理中 (直接修改数组项)
-                this.interfaces[ifaceIndex].status = 'pending';
-                this.interfaces[ifaceIndex].lastError = null; // 清除旧错误
-
-                const controller = new AbortController();
-                 // 确保 timeout 是有效数字，提供默认值
-                const timeoutValue = (typeof iface.timeout === 'number' && iface.timeout > 0) ? iface.timeout : 3;
-                const timeoutMs = timeoutValue * 1000;
-                const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-                const startTime = Date.now();
-                let statusData = {
-                    statusCode: null, responseTime: null, containsExpected: false,
-                    success: false, error: null, timestamp: Date.now()
-                };
-
-                try {
-                    // 使用 fetch API 发起请求
-                    const response = await fetch(iface.url, {
-                        signal: controller.signal,
-                        credentials: 'omit', // 不发送cookies等凭证
-                        mode: 'cors',        // 需要目标服务器支持CORS
-                        cache: 'no-store',   // 尝试最强的无缓存策略
-                        headers: {
-                             'Cache-Control': 'no-cache, no-store, must-revalidate',
-                             'Pragma': 'no-cache',
-                             'Expires': '0'
-                        }
-                    });
-                    clearTimeout(timeoutId); // 请求成功，清除超时
-                    const endTime = Date.now();
-                    statusData.responseTime = endTime - startTime;
-                    statusData.statusCode = response.status;
-
-                    if (response.ok) { // HTTP 状态码 200-299
-                        const text = await response.text();
-                         // 检查预期文本，确保 expectedText 是字符串
-                        statusData.containsExpected = typeof iface.expectedText === 'string' && text.includes(iface.expectedText);
-                        if (statusData.containsExpected) {
-                            statusData.success = true;
-                            this.updateInterfaceState(interfaceId, {
-                                status: 'ok', lastChecked: statusData.timestamp,
-                                lastResponseTime: statusData.responseTime, lastError: null
-                            });
-                        } else {
-                            statusData.success = false;
-                            statusData.error = '响应内容未包含预期字符';
-                            this.updateInterfaceState(interfaceId, {
-                                status: 'error', lastChecked: statusData.timestamp,
-                                lastResponseTime: statusData.responseTime, lastError: statusData.error
-                            });
-                            this.showErrorAlert(`"${iface.title}": ${statusData.error}`);
-                        }
-                    } else { // HTTP 状态码非 2xx
-                        statusData.success = false;
-                        statusData.error = `HTTP状态码错误: ${response.status}`;
-                        this.updateInterfaceState(interfaceId, {
-                            status: 'error', lastChecked: statusData.timestamp,
-                            lastResponseTime: statusData.responseTime, lastError: statusData.error
-                        });
-                        this.showErrorAlert(`"${iface.title}": ${statusData.error}`);
-                    }
-                } catch (error) { // 网络错误或超时
-                    clearTimeout(timeoutId);
-                    const endTime = Date.now();
-                    // 记录到出错/超时的时间
-                    statusData.responseTime = endTime - startTime;
-                    statusData.success = false;
-                    if (error.name === 'AbortError') {
-                        statusData.error = `请求超时 (${timeoutMs / 1000}秒)`;
-                    } else {
-                        // 可能是CORS错误、DNS错误、网络中断等
-                        // 浏览器通常不会暴露 CORS 错误的具体细节给 JS
-                        statusData.error = `请求失败 (可能是网络或CORS问题)`;
-                        console.error(`Fetch error for ${iface.url}:`, error); // 打印详细错误到控制台
-                    }
-                    this.updateInterfaceState(interfaceId, {
-                        status: 'error', lastChecked: statusData.timestamp,
-                        lastResponseTime: null, // 超时或网络错误无有效响应时间
-                        lastError: statusData.error
-                    });
-                    this.showErrorAlert(`"${iface.title}": ${statusData.error}`);
-                }
-
-                // 异步记录日志
-                this.addLog({
-                    id: crypto.randomUUID(), interfaceId: iface.id,
-                    timestamp: statusData.timestamp, url: iface.url,
-                    statusCode: statusData.statusCode, responseTime: statusData.responseTime,
-                    containsExpected: statusData.containsExpected, success: statusData.success,
-                    error: statusData.error
-                });
-            },
-
-            // --- 接口管理 ---
-            addInterface() {
-                // 基本表单校验
-                const title = this.newInterface.title.trim();
-                const url = this.newInterface.url.trim();
-                const expectedText = this.newInterface.expectedText; // 不 trim，允许包含空格
-                // 确保 timeout 是正整数，否则使用默认值
-                let timeout = parseInt(this.newInterface.timeout, 10);
-                if (isNaN(timeout) || timeout <= 0) {
-                    timeout = 3;
-                }
-
-                if (!title || !url || expectedText === undefined || expectedText === null) { // expectedText 可以为空字符串 ""
-                    this.showErrorAlert('请填写接口标题、URL和预期返回字符！'); return;
-                }
-                try {
-                     new URL(url); // 尝试解析URL验证格式
-                     if (!url.match(/^https?:\/\//i)) {
-                         throw new Error("URL must start with http:// or https://");
-                     }
-                } catch (e) {
-                     this.showErrorAlert('URL 格式不正确，必须是有效的、以 http:// 或 https:// 开头的网址！'); return;
-                }
-
-                const newIface = {
-                    id: crypto.randomUUID(), title: title, url: url,
-                    expectedText: expectedText, timeout: timeout,
-                    favicon: this.getFaviconUrl(url), // 尝试获取Favicon
-                    status: 'pending', // 初始状态
-                    lastChecked: null, lastResponseTime: null, lastError: null
-                };
-
-                this.interfaces.push(newIface);
-                this.saveInterfaces(); // 保存接口列表到 IndexedDB
-                this.closeAddModal();
-                this.resetNewInterfaceForm();
-                this.checkInterfaceStatus(newIface.id); // 立即检查新接口
-
-                if (this.interfaces.length > 0 && !this.pollingInterval) {
-                    this.startPolling(); // 如果之前没有接口在轮询，启动它
-                }
-            },
-
-            confirmDeleteInterface(id) {
-                const iface = this.interfaces.find(i => i.id === id);
-                if (!iface) return;
-                Swal.fire({
-                    title: `确认删除接口 "${iface.title}"?`,
-                    text: "同时删除所有相关日志，操作不可恢复!",
-                    icon: 'warning', showCancelButton: true,
-                    confirmButtonColor: '#d33', cancelButtonColor: '#3085d6',
-                    confirmButtonText: '确认删除', cancelButtonText: '取消'
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        this.deleteInterface(id);
-                    }
-                });
-            },
-
-            async deleteInterface(id) {
-                const initialLength = this.interfaces.length;
-                 // 先从内存中过滤掉
-                this.interfaces = this.interfaces.filter(i => i.id !== id);
-                 // 从内存中也删除日志
-                this.logs = this.logs.filter(log => log.interfaceId !== id);
-
-                if (this.interfaces.length < initialLength) { // 确认内存中已删除
-                    try {
-                        // 再从 IndexedDB 删除接口和日志 (这两个操作可以并行)
-                        await Promise.all([
-                           deleteItem(INTERFACE_STORE, id),
-                           deleteLogsByInterface(id) // 这个函数内部已经是异步删除了
-                        ]);
-
-                        console.log(`Interface ${id} and its logs deleted from IndexedDB and memory.`);
-                        // 保存更新后的 interfaces 和 logs 列表到 IndexedDB
-                        // (删除操作后，需要重新保存列表以反映删除)
-                        // await this.saveInterfaces(); // saveAll会清空再写，这里可能不需要
-                        // await this.saveLogs();
-
-                        // 如果删除后没有接口了，停止轮询
                         if (this.interfaces.length === 0) {
-                            this.stopPolling();
+                            console.log("No interfaces found, adding default example.");
+                            const defaultIface = {
+                                id: crypto.randomUUID(), title: '示例接口 (Example.com)', url: 'https://example.com/',
+                                expectedText: 'Example Domain', timeout: 5, favicon: this.getFaviconUrl('https://example.com/'),
+                                status: 'pending', lastChecked: null, lastResponseTime: null, lastError: null, nextCheckInSeconds: undefined
+                            };
+                            this.interfaces.push(defaultIface);
+                            await this.saveInterfaces(); // Ensure example is saved
+                            this.addToast('已添加一个示例接口，您可以编辑或删除它', 'info', 6000);
+                        } else {
+                            this.interfaces.forEach(iface => {
+                                iface.status = iface.status === 'pending' ? 'pending' : (iface.status || 'pending');
+                                if (!iface.favicon) iface.favicon = this.getFaviconUrl(iface.url);
+                                if (typeof iface.timeout !== 'number' || iface.timeout <= 0) iface.timeout = 3;
+                                iface.nextCheckInSeconds = undefined;
+                            });
                         }
-                    } catch(error) {
-                        console.error("Error deleting interface or logs from DB:", error);
-                        this.showErrorAlert('从数据库删除接口或日志时出错。请刷新页面重试。');
-                        // 数据库操作失败，可能需要重新加载数据以恢复界面和内存的一致性
-                        // await this.init(); // 强制重新加载
+
+                        this.startPolling();
+                        this.startUiUpdates();
+                        console.log('Initialization complete.');
+
+                    } catch (error) {
+                        console.error("Initialization failed:", error);
+                        this.addToast('加载本地数据失败!', 'error');
                     }
-                } else {
-                     console.warn(`Attempted to delete non-existent interface ID: ${id}`);
-                }
-            },
+                },
 
-            // 更新接口状态（内存中）
-            updateInterfaceState(id, newState) {
-                const index = this.interfaces.findIndex(i => i.id === id);
-                if (index !== -1) {
-                    // 使用扩展运算符合并新旧状态，确保不会丢失其他属性
-                    this.interfaces[index] = { ...this.interfaces[index], ...newState };
-                    // 考虑持久化：只更新这一个接口可能比saveAll更高效，但需要实现put或update方法
-                    // dbAction(INTERFACE_STORE, 'readwrite', (store) => store.put(this.interfaces[index]));
-                } else {
-                    // 可能在检查过程中接口被删除了
-                    console.log(`Interface ${id} not found during state update (possibly deleted).`);
-                }
-            },
-
-            // --- 日志管理 ---
-            async addLog(logData) {
-                this.logs.push(logData);
-
-                // 日志轮换: 保留最新 N 条正常日志 + 所有错误日志
-                const errorLogs = this.logs.filter(log => !log.success);
-                let normalLogs = this.logs.filter(log => log.success);
-                normalLogs.sort((a, b) => b.timestamp - a.timestamp); // 按时间降序
-                const keptNormalLogs = normalLogs.slice(0, this.maxNormalLogs); // 取最新的N条
-
-                // 只保留需要的日志
-                this.logs = [...errorLogs, ...keptNormalLogs];
-
-                // 异步保存当前日志状态到 IndexedDB (不需要等待)
-                this.saveLogs().catch(error => console.error("Background log saving failed:", error));
-            },
-
-            // 获取当前弹窗需要显示的日志
-            filteredLogs() {
-                if (!this.currentLogInterfaceId) return [];
-                // 过滤并按时间降序排列
-                return this.logs
-                           .filter(log => log.interfaceId === this.currentLogInterfaceId)
-                           .sort((a, b) => b.timestamp - a.timestamp);
-            },
-
-            confirmClearLogs(interfaceId) {
-                const iface = this.interfaces.find(i => i.id === interfaceId);
-                 if (!iface) return;
-                 Swal.fire({
-                    title: `确认清空接口 "${iface.title}" 的所有日志?`,
-                    text: "操作不可恢复!", icon: 'warning', showCancelButton: true,
-                    confirmButtonColor: '#d33', cancelButtonColor: '#3085d6',
-                    confirmButtonText: '确认清空', cancelButtonText: '取消'
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        this.clearLogs(interfaceId);
+                // --- 轮询控制 ---
+                startPolling() {
+                    if (this.pollingInterval) clearInterval(this.pollingInterval);
+                    console.log("Attempting to start polling...");
+                    if (this.interfaces.length === 0) {
+                        console.log("No interfaces to monitor, polling not started.");
+                        return;
                     }
-                });
-            },
+                    console.log("Performing initial check...");
+                    this.checkAllInterfaces(); // Check immediately
+                    this.pollingInterval = setInterval(() => {
+                        this.checkAllInterfaces();
+                    }, this.pollingFrequency);
+                    console.log(`Polling started: checking every ${this.pollingFrequency / 1000}s.`);
+                },
+                stopPolling() {
+                    if (this.pollingInterval) { clearInterval(this.pollingInterval); this.pollingInterval = null; console.log('Polling stopped.'); }
+                },
+                startUiUpdates() {
+                    if (this.uiUpdateInterval) clearInterval(this.uiUpdateInterval);
+                    this.uiUpdateInterval = setInterval(() => { this.updateNextCheckTimers(); }, 1000); // Update UI every second
+                    console.log('UI update interval started.');
+                },
+                stopUiUpdates() {
+                    if (this.uiUpdateInterval) { clearInterval(this.uiUpdateInterval); this.uiUpdateInterval = null; console.log('UI update interval stopped.'); }
+                },
 
-            async clearLogs(interfaceId) {
-                const logsBefore = this.logs.length;
-                // 从内存中清除
-                this.logs = this.logs.filter(log => log.interfaceId !== interfaceId);
-                const logsClearedFromMemory = logsBefore - this.logs.length;
-
-                 try {
-                    // 从 IndexedDB 删除
-                    await deleteLogsByInterface(interfaceId);
-                    console.log(`Logs for interface ${interfaceId} cleared from memory (${logsClearedFromMemory} logs) and IndexedDB.`);
-                    // 可能需要手动触发UI更新，如果Alpine没有自动检测到数组变化（虽然通常会）
-                    // this.currentLogInterfaceId = this.currentLogInterfaceId;
-                     // 保存一次空的日志列表到DB（如果deleteLogsByInterface失败可能需要）
-                    // await this.saveLogs();
-                } catch (error) {
-                    console.error("Error clearing logs from DB:", error);
-                    this.showErrorAlert('清空数据库日志时出错。请刷新页面重试。');
-                    // 如果数据库失败，可能需要重新加载
-                    // await this.init();
-                }
-            },
-
-            // --- 弹窗控制 ---
-            openAddModal() {
-                this.isAddModalOpen = true;
-                // 可选：延迟聚焦到第一个输入框
-                this.$nextTick(() => {
-                   const titleInput = document.getElementById('newTitle');
-                   if(titleInput) titleInput.focus();
-                });
-            },
-            closeAddModal() { this.isAddModalOpen = false; this.resetNewInterfaceForm(); },
-            openLogModal(id) { this.currentLogInterfaceId = id; this.isLogModalOpen = true; },
-            closeLogModal() { this.isLogModalOpen = false; this.currentLogInterfaceId = null; },
-
-            // --- 数据持久化 (调用IndexedDB封装) ---
-            async saveInterfaces() {
-                console.log("Saving interfaces to IndexedDB...");
-                try {
-                    // 使用一份当前接口列表的拷贝进行保存，防止在保存过程中列表被修改
-                    const interfacesToSave = JSON.parse(JSON.stringify(this.interfaces));
-                    await saveAll(INTERFACE_STORE, interfacesToSave);
-                    console.log('Interfaces saved successfully.');
-                } catch (error) {
-                    console.error("Failed to save interfaces to IndexedDB:", error);
-                    this.showErrorAlert('保存接口列表失败！数据可能不会被持久化。');
-                }
-            },
-            async saveLogs() {
-                // console.log("Saving logs to IndexedDB..."); // 日志保存频繁，减少console输出
-                try {
-                     // 使用拷贝保存
-                    const logsToSave = JSON.parse(JSON.stringify(this.logs));
-                    await saveAll(LOG_STORE, logsToSave);
-                    // console.log('Logs saved successfully.');
-                } catch (error) {
-                    console.error("Failed to save logs to IndexedDB:", error);
-                    // 日志保存失败通常不弹窗打扰用户，仅记录错误
-                }
-            },
-
-             // --- 辅助函数 ---
-            resetNewInterfaceForm() {
-                this.newInterface = { title: '', url: '', expectedText: '', timeout: 3 };
-            },
-
-            getFaviconUrl(baseUrl) {
-                try {
-                    const url = new URL(baseUrl);
-                    // 总是返回标准路径 /favicon.ico
-                    return `${url.protocol}//${url.hostname}/favicon.ico`;
-                } catch (e) {
-                    // URL 无效或无法解析 hostname
-                    console.warn(`Invalid URL for favicon generation: ${baseUrl}`);
-                    return DEFAULT_FAVICON_URI; // 返回默认SVG图标
-                }
-            },
-
-            getStatusText(status) {
-                const map = { ok: '正常', error: '异常', pending: '检测中...' };
-                return map[status] || '待检测';
-            },
-
-            formatTimestamp(timestamp) {
-                if (!timestamp) return 'N/A';
-                try {
-                    // 使用更可靠的时区无关格式或本地格式
-                    return new Date(timestamp).toLocaleString('zh-CN', {
-                        year: 'numeric', month: '2-digit', day: '2-digit',
-                        hour: '2-digit', minute: '2-digit', second: '2-digit',
-                        hour12: false
+                // --- 核心检测逻辑 ---
+                checkAllInterfaces() {
+                    console.log(`[${new Date().toLocaleTimeString()}] checkAllInterfaces: Checking ${this.interfaces.length} interfaces...`);
+                    if (this.interfaces.length === 0) return;
+                    this.interfaces.forEach(iface => {
+                        // No need to check for pending status here, checkInterfaceStatus handles it
+                        console.log(`---> Triggering check for: ${iface.title} (ID: ${iface.id}, Current Status: ${iface.status})`);
+                        this.checkInterfaceStatus(iface.id);
                     });
-                } catch (e) { return 'Invalid Date'; }
-            },
+                },
+                async checkInterfaceStatus(interfaceId) {
+                    const ifaceIndex = this.interfaces.findIndex(i => i.id === interfaceId);
+                    if (ifaceIndex === -1) { console.warn(`checkInterfaceStatus: Interface ID ${interfaceId} not found.`); return; }
 
-            truncateUrl(url, length = 35) { // 稍微加长一点
-                if (!url) return '';
-                return url.length > length ? url.substring(0, length) + '...' : url;
-            },
+                    // Set status to pending immediately for visual feedback
+                    this.updateInterfaceState(interfaceId, { status: 'pending', lastError: null, nextCheckInSeconds: undefined });
 
-            getInterfaceTitle(id) {
-                const iface = this.interfaces.find(i => i.id === id);
-                return iface ? iface.title : '未知接口';
-            },
-             getInterfaceExpectedText(id) {
-                const iface = this.interfaces.find(i => i.id === id);
-                if (!iface) return 'N/A';
-                 // 如果预期文本为空，显示 '(空)'
-                return iface.expectedText === '' ? '(空)' : iface.expectedText;
-             },
+                    let iface = this.interfaces[ifaceIndex]; // Get the most current interface data
+                    const controller = new AbortController();
+                    const timeoutValue = (typeof iface.timeout === 'number' && iface.timeout > 0) ? iface.timeout : 3;
+                    const timeoutMs = timeoutValue * 1000;
+                    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-            showErrorAlert(message) {
-                Swal.fire({
-                    icon: 'warning', // 使用 warning 更通用
-                    title: '提示', // 标题简化
-                    text: message,
-                    toast: true, position: 'top-end',
-                    showConfirmButton: false, timer: 4000, timerProgressBar: true,
-                    // 点击 toast 时关闭
-                    didOpen: (toast) => {
-                        toast.addEventListener('mouseenter', Swal.stopTimer)
-                        toast.addEventListener('mouseleave', Swal.resumeTimer)
-                        toast.addEventListener('click', () => Swal.close()) // 添加点击关闭
+                    const startTime = Date.now();
+                    let statusData = { statusCode: null, responseTime: null, containsExpected: false, success: false, error: null, timestamp: Date.now() };
+                    let finalState = {};
+
+                    try {
+                        const response = await fetchThroughProxy({ url: iface.url, method: 'GET', headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache', 'Expires': '0' }, signal: controller.signal });
+                        clearTimeout(timeoutId); // Success or non-timeout error, clear timer
+                        const endTime = Date.now();
+                        statusData.responseTime = endTime - startTime;
+                        statusData.statusCode = response.status;
+
+                        if (response.ok) { // Status 200-299
+                            const text = await response.text();
+                            statusData.containsExpected = typeof iface.expectedText === 'string' && text.includes(iface.expectedText);
+                            if (statusData.containsExpected) {
+                                statusData.success = true;
+                                finalState = { status: 'ok', lastChecked: statusData.timestamp, lastResponseTime: statusData.responseTime, lastError: null };
+                            } else {
+                                statusData.success = false; statusData.error = '响应未包含预期字符';
+                                finalState = { status: 'error', lastChecked: statusData.timestamp, lastResponseTime: statusData.responseTime, lastError: statusData.error };
+                                this.addToast(`"${iface.title}": ${statusData.error}`, 'warning');
+                            }
+                        } else { // Status outside 200-299
+                            statusData.success = false; statusData.error = `HTTP状态码: ${response.status}`;
+                            try { const errorText = await response.text(); if (errorText) statusData.error += ` - ${errorText.substring(0, 100)}`; } catch (_) { /* Ignore response body error */ }
+                            finalState = { status: 'error', lastChecked: statusData.timestamp, lastResponseTime: statusData.responseTime, lastError: statusData.error };
+                            this.addToast(`"${iface.title}": ${statusData.error}`, 'error');
+                        }
+                    } catch (error) { // Network error or AbortError (timeout)
+                        clearTimeout(timeoutId); // Clear timer if fetch itself threw
+                        const endTime = Date.now();
+                        statusData.responseTime = endTime - startTime; // Capture time until error
+                        statusData.success = false;
+                        if (error.name === 'AbortError') {
+                            statusData.error = `请求超时 (${timeoutMs / 1000}s)`;
+                            finalState = { status: 'error', lastChecked: statusData.timestamp, lastResponseTime: null, lastError: statusData.error };
+                        } else {
+                            statusData.error = `请求失败: ${error.message}`;
+                            finalState = { status: 'error', lastChecked: statusData.timestamp, lastResponseTime: null, lastError: statusData.error };
+                            console.error(`Proxy fetch error for ${iface.url}:`, error);
+                        }
+                        this.addToast(`"${iface.title}": ${statusData.error}`, 'error');
+                    } finally {
+                        // Update the interface state in memory
+                        this.updateInterfaceState(interfaceId, finalState);
+                        // Add the log record (this handles saving to DB and pruning)
+                        this.addLog({ id: crypto.randomUUID(), interfaceId: iface.id, timestamp: statusData.timestamp, url: iface.url, statusCode: statusData.statusCode, responseTime: statusData.responseTime, containsExpected: statusData.containsExpected, success: statusData.success, error: statusData.error });
+                        // Recalculate all timers for the UI
+                        this.updateNextCheckTimers();
                     }
-                });
+                },
+
+                // --- 接口操作 (CRUD) ---
+                addInterface() {
+                    const title = this.newInterface.title.trim(); const url = this.newInterface.url.trim(); const expectedText = this.newInterface.expectedText; let timeout = parseInt(this.newInterface.timeout, 10); if (isNaN(timeout) || timeout <= 0) timeout = 3;
+                    if (!title || !url || expectedText === undefined || expectedText === null) { this.addToast('请填写所有必填项!', 'warning'); return; }
+                    try { new URL(url); if (!url.match(/^https?:\/\//i)) throw new Error("无效协议"); } catch (e) { this.addToast('URL 格式不正确 (需包含 http:// 或 https://)!', 'error'); return; }
+                    const newIface = { id: crypto.randomUUID(), title: title, url: url, expectedText: expectedText, timeout: timeout, favicon: this.getFaviconUrl(url), status: 'pending', lastChecked: null, lastResponseTime: null, lastError: null, nextCheckInSeconds: undefined };
+                    this.interfaces.push(newIface);
+                    this.saveInterfaces(); // Save all interfaces (including the new one)
+                    this.closeAddModal();
+                    this.resetNewInterfaceForm();
+                    this.addToast(`接口 "${title}" 已添加`, 'success');
+                    this.checkInterfaceStatus(newIface.id); // Trigger immediate check
+                    if (this.interfaces.length === 1 && !this.pollingInterval) { this.startPolling(); this.startUiUpdates(); } // Start polling if this is the first interface
+                },
+                openEditModal(iface) {
+                    // Deep clone to avoid modifying original object until saved
+                    this.editingInterface = JSON.parse(JSON.stringify(iface));
+                    // Ensure timeout is a number for the input field
+                    if (typeof this.editingInterface.timeout !== 'number') { this.editingInterface.timeout = 3; }
+                    this.$refs?.editModal?.showModal();
+                    this.$nextTick(() => this.$refs?.editModal?.querySelector('input[type="text"]')?.focus());
+                },
+                closeEditModal() {
+                    if (this.$refs?.editModal?.open) this.$refs.editModal.close();
+                    this.editingInterface = null; // Clear editing state
+                },
+                updateInterface() {
+                    if (!this.editingInterface) return;
+                    const { id, title: rawTitle, url: rawUrl, expectedText, timeout: rawTimeout } = this.editingInterface;
+                    const title = rawTitle.trim(); const url = rawUrl.trim(); let timeout = parseInt(rawTimeout, 10); if (isNaN(timeout) || timeout <= 0) timeout = 3;
+                    if (!title || !url || expectedText === undefined || expectedText === null) { this.addToast('请填写所有必填项!', 'warning'); return; }
+                    try { new URL(url); if (!url.match(/^https?:\/\//i)) throw new Error("无效协议"); } catch (e) { this.addToast('URL 格式不正确!', 'error'); return; }
+
+                    const index = this.interfaces.findIndex(i => i.id === id);
+                    if (index !== -1) {
+                        const originalInterface = this.interfaces[index];
+                        // Update only user-editable fields, keep status etc.
+                        this.interfaces[index] = { ...originalInterface, title, url, expectedText, timeout, favicon: this.getFaviconUrl(url) };
+                        this.saveInterfaces(); // Persist changes
+                        this.closeEditModal();
+                        this.addToast(`接口 "${title}" 已更新`, 'success');
+                        this.checkInterfaceStatus(id); // Re-check immediately after update
+                    } else {
+                        this.addToast('更新失败：未找到接口', 'error');
+                        this.closeEditModal(); // Close modal even if update failed
+                    }
+                },
+                confirmDeleteInterface(id) {
+                    const iface = this.interfaces.find(i => i.id === id); if (!iface) return;
+                    Swal.fire({ title: `确认删除接口 "${iface.title}"?`, text: "将同时删除所有相关日志记录，此操作不可恢复!", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6', confirmButtonText: '确认删除', cancelButtonText: '取消' }).then((result) => { if (result.isConfirmed) { this.deleteInterface(id); } });
+                },
+                async deleteInterface(id) {
+                    const ifaceToDelete = this.interfaces.find(i => i.id === id); const titleToDelete = ifaceToDelete ? ifaceToDelete.title : '未知';
+                    // Remove from memory first
+                    this.interfaces = this.interfaces.filter(i => i.id !== id);
+                    this.logs = this.logs.filter(log => log.interfaceId !== id);
+                    // Attempt to remove from DB
+                    try {
+                        await deleteItem(INTERFACE_STORE, id);
+                        await deleteLogsByInterface(id);
+                        console.log(`Interface ${id} (${titleToDelete}) and its logs deleted from DB.`);
+                        this.addToast(`接口 "${titleToDelete}" 已删除`, 'success');
+                        // Stop polling if no interfaces left
+                        if (this.interfaces.length === 0) { this.stopPolling(); this.stopUiUpdates(); }
+                    } catch (error) {
+                        console.error(`DB Error deleting interface/logs for ${id}:`, error);
+                        this.addToast('删除接口或日志时出错。', 'error');
+                        // Consider if UI needs to reflect DB deletion failure (e.g., re-add item?)
+                    }
+                },
+                // Helper to update interface state in the `interfaces` array
+                updateInterfaceState(id, newState) {
+                    const index = this.interfaces.findIndex(i => i.id === id);
+                    if (index !== -1) {
+                        // Merge new state properties into the existing object
+                        this.interfaces[index] = { ...this.interfaces[index], ...newState };
+                    } else {
+                        // This might happen if the interface was deleted during an async check
+                        console.warn(`updateInterfaceState: Interface ID ${id} not found (may have been deleted).`);
+                    }
+                },
+
+                // --- 日志管理 ---
+                async addLog(logData) {
+                    // 1. Add to memory cache
+                    this.logs.push(logData);
+                    // 2. Filter and sort logs for this specific interface in memory
+                    const interfaceLogs = this.logs
+                        .filter(log => log.interfaceId === logData.interfaceId)
+                        .sort((a, b) => b.timestamp - a.timestamp); // Newest first
+                    // 3. Prune memory cache if exceeds maxLogsPerInterface
+                    const logsToRemoveFromMemory = interfaceLogs.slice(this.maxLogsPerInterface);
+                    if (logsToRemoveFromMemory.length > 0) {
+                        const idsToRemove = new Set(logsToRemoveFromMemory.map(l => l.id));
+                        this.logs = this.logs.filter(log => !idsToRemove.has(log.id));
+                        // console.debug(`Pruned ${idsToRemove.size} logs from memory for ${logData.interfaceId}`);
+                    }
+                    // 4. Asynchronously save to DB and prune DB
+                    try {
+                        await saveLog(logData); // Save the new log
+                        const prunedCount = await pruneOldLogs(logData.interfaceId, this.maxLogsPerInterface); // Clean up older logs in DB
+                        if (prunedCount > 0) {
+                            console.log(`Pruned ${prunedCount} old logs from DB for ${logData.interfaceId}.`);
+                        }
+                    } catch (e) {
+                        console.error("Background log save/prune failed:", e);
+                        // Optional: Add a subtle toast for persistent errors?
+                    }
+                },
+                // Get filtered and sorted logs for the log modal
+                filteredLogs() {
+                    if (!this.currentLogInterfaceId) return [];
+                    // Assumes logs in memory are already relatively pruned by addLog
+                    return this.logs
+                        .filter(log => log.interfaceId === this.currentLogInterfaceId)
+                        .sort((a, b) => b.timestamp - a.timestamp); // Ensure sort order for display
+                },
+                confirmClearLogs(interfaceId) {
+                    const iface = this.interfaces.find(i => i.id === interfaceId); if (!iface) return;
+                    this.closeLogModal(); // Close modal *before* showing SweetAlert
+                    this.$nextTick(() => { // Ensure DOM is updated before showing alert
+                        Swal.fire({ title: `确认清空接口 "${iface.title}" 的所有日志?`, text: "此操作不可恢复!", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6', confirmButtonText: '确认清空', cancelButtonText: '取消', }).then((result) => { if (result.isConfirmed) { this.clearLogs(interfaceId); } });
+                    });
+                },
+                async clearLogs(interfaceId) {
+                    const logsBefore = this.logs.filter(log => log.interfaceId === interfaceId).length;
+                    // 1. Clear from memory
+                    this.logs = this.logs.filter(log => log.interfaceId !== interfaceId);
+                    // 2. Clear from DB
+                    try {
+                        await deleteLogsByInterface(interfaceId);
+                        console.log(`Cleared ${logsBefore} logs for interface ${interfaceId} from memory and DB.`);
+                        this.addToast(`已清空 ${logsBefore} 条日志`, 'success');
+                    } catch (error) {
+                        console.error(`DB Error clearing logs for ${interfaceId}:`, error);
+                        this.addToast('清空数据库日志时出错。', 'error');
+                    }
+                    // Keep the log modal closed (already closed by confirmClearLogs)
+                    // this.currentLogInterfaceId = null; // No need to set here if closed already
+                },
+
+                // --- IndexedDB 持久化操作 ---
+                async saveInterfaces() {
+                    try {
+                        // Use deep clone to avoid storing proxies
+                        const dataToSave = this.interfaces.map(iface => JSON.parse(JSON.stringify(iface)));
+                        // Use put (saveItem) which handles both add and update
+                        await Promise.all(dataToSave.map(iface => saveItem(INTERFACE_STORE, iface)));
+                        console.log('Interfaces saved to IndexedDB.');
+                    } catch (e) {
+                        console.error("Save Interfaces error:", e);
+                        this.addToast('保存接口列表失败!', 'error');
+                    }
+                },
+
+                // --- UI & 辅助函数 ---
+                resetNewInterfaceForm() { this.newInterface = { title: '', url: '', expectedText: '', timeout: 3 }; },
+                openAddModal() {
+                    console.log('openAddModal called'); // Debug log
+                    this.resetNewInterfaceForm();
+                    this.$refs?.addModal?.showModal();
+                    this.$nextTick(() => this.$refs?.addModal?.querySelector('input[type="text"]')?.focus());
+                },
+                closeAddModal() { this.$refs?.addModal?.close(); },
+                openLogModal(id) { this.currentLogInterfaceId = id; this.$refs?.logModal?.showModal(); },
+                closeLogModal() { if (this.$refs?.logModal?.open) this.$refs.logModal.close(); this.currentLogInterfaceId = null; }, // Clear ID on manual close
+                getFaviconUrl(baseUrl) { try { const url = new URL(baseUrl); return `${url.protocol}//${url.hostname}/favicon.ico`; } catch (e) { return DEFAULT_FAVICON_URI; } },
+                getStatusText(status) { const map = { ok: '正常', error: '异常', pending: '检测中...' }; return map[status] || '待检测'; },
+                formatTimestamp(timestamp) { if (!timestamp) return 'N/A'; try { return new Date(timestamp).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); } catch (e) { return '无效日期'; } },
+                truncateUrl(url, length = 35) { if (!url) return ''; return url.length > length ? url.substring(0, length) + '...' : url; },
+                getInterfaceTitle(id) { const iface = this.interfaces.find(i => i.id === id); return iface ? iface.title : '未知接口'; },
+                getInterfaceExpectedText(id) { const iface = this.interfaces.find(i => i.id === id); return iface ? (iface.expectedText === '' ? '(空)' : iface.expectedText) : 'N/A'; },
+                updateNextCheckTimers() {
+                    const now = Date.now();
+                    this.interfaces.forEach(iface => {
+                        if (iface.lastChecked && iface.status !== 'pending') {
+                            const elapsed = now - iface.lastChecked; const remaining = this.pollingFrequency - elapsed;
+                            iface.nextCheckInSeconds = Math.max(0, Math.round(remaining / 1000));
+                        } else if (iface.status !== 'pending') {
+                            // If never checked, or not pending, don't show timer
+                            iface.nextCheckInSeconds = undefined;
+                        }
+                        // If status is 'pending', nextCheckInSeconds is already undefined (set by checkInterfaceStatus)
+                    });
+                },
+
+                // --- Toast 通知 ---
+                addToast(message, type = 'info', duration = 4000) { const id = crypto.randomUUID(); this.toasts.push({ id, message, type }); setTimeout(() => this.removeToast(id), duration); },
+                removeToast(id) { this.toasts = this.toasts.filter(t => t.id !== id); }
             }
-        }
-    }
-    // --- End Alpine.js State ---
-</script>
+        } // End of appState function
+    </script>
 
 </body>
+
 </html>
