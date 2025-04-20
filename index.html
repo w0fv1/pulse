@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HTTP接口健康监控</title>
+    <title>HTTP接口健康监控 (daisyUI)</title>
     <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.24/dist/full.min.css" rel="stylesheet" type="text/css" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -79,7 +79,7 @@
                         <div class="card-title-area mb-2">
                             <div class="flex items-center min-w-0 flex-1">
                                 <img :src="iface.favicon || DEFAULT_FAVICON_URI"
-                                    @error="event.target.src=DEFAULT_FAVICON_URI" alt="favicon" class="favicon-img">
+                                @error="if (event.target.src !== DEFAULT_FAVICON_URI) event.target.src = DEFAULT_FAVICON_URI" alt="favicon" class="favicon-img">
                                 <h2 class="card-title text-lg truncate" x-text="iface.title" :title="iface.title">
                                 </h2>
                             </div>
